@@ -233,7 +233,7 @@ void blur_helper(void *work_arg)
   }
 
   // set pixel to computed region RBG value (unmodified if boundary)
-  set_pixel(&tmp, i, j, &rgb);
+  set_pixel(tmp, i, j, &rgb);
 }
 
 void parallel_blur_picture(struct picture *pic)
@@ -265,15 +265,11 @@ void parallel_blur_picture(struct picture *pic)
       item->tmp = &tmp;
       item->row_index = i;
       item->col_index = j;
-      pthread_t thread;
       pthread_create(&pool.threads[thread_counter], NULL, (void *(*)(void *))blur_helper, item);
       thread_counter++;
     }
   }
-  for (int i = 0; i < pool.thread_count; i++)
-  {
-    pthread_join(pool.threads[i], NULL);
-  }
+
 
   free(pool.threads);
   // clean-up the old picture and replace with new picture

@@ -34,6 +34,6 @@ void flip_picture(struct picture *pic, char plane);
 void blur_picture(struct picture *pic);
 void parallel_blur_picture(struct picture *pic);
 
-void *blur_helper(void *work_arg);
+void blur_helper(void *work_arg);
 
 #endif
