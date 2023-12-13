@@ -19,6 +19,8 @@ void column_blur_picture(struct picture *pic);
 void blur_sector(struct work_item *work_arg);
 void sector_blur_picture(struct picture *pic);
 void pixel_blur_picture(struct picture *pic);
+void blur_pixel(struct work_item *work_arg);
+
 struct thread_list
 {
   struct node *head;
@@ -34,7 +36,7 @@ struct node
 
 int main(int argc, char **argv)
 {
-  const char *file = "images/keepcalm.png";
+  const char *file = "images/ducks1.jpg";
   const char *blur_file = "images/duck_seq.jpg";
   struct picture pic;
 
@@ -283,7 +285,6 @@ void sector_blur_picture(struct picture *pic)
 
   int sector_width;
   int sector_height;
-  // printf("%d, %d\n", tmp.width, tmp.height);
   if (tmp.width > tmp.height)
   {
     sector_width = tmp.width / 4;
@@ -294,7 +295,6 @@ void sector_blur_picture(struct picture *pic)
     sector_height = tmp.height / 4;
     sector_width = tmp.width / 2;
   }
-  // printf("%d, %d\n", sector_height, sector_width);
   for (int sector = 0; sector < 8; sector++)
   {
     int start_row;
@@ -309,7 +309,6 @@ void sector_blur_picture(struct picture *pic)
       start_row = (sector % 2) * sector_width;
       start_col = (sector / 2) * sector_height;
     }
-    // printf("%d, %d\n", start_row, start_col);
 
     struct work_item *item = (struct work_item *)malloc(sizeof(struct work_item));
     if (item == NULL)
@@ -331,6 +330,61 @@ void sector_blur_picture(struct picture *pic)
     add_thread(&list, thread);
   }
   join_free_thread(&list);
+  clear_picture(pic);
+  overwrite_picture(pic, &tmp);
+}
+
+void blur_pixel(struct work_item *work_arg)
+{
+  blur_helper(work_arg);
+  free(work_arg);
+}
+void pixel_blur_picture(struct picture *pic)
+{
+  struct picture tmp;
+  init_picture_from_size(&tmp, pic->width, pic->height);
+  struct thread_list list;
+  init_thread_list(&list);
+
+  pthread_t threads[10];
+  int thread_counter = 0;
+
+  // iterate over each pixel in the picture
+  for (int i = 0; i < tmp.width; i++)
+  {
+    for (int j = 0; j < tmp.height; j++)
+    {
+      struct work_item *item = (struct work_item *)malloc(sizeof(struct work_item));
+      if (item == NULL)
+      {
+        break;
+      }
+      item->pic = pic;
+      item->tmp = &tmp;
+      item->row_index = i;
+      item->col_index = j;
+      if (thread_counter >= 10)
+      {
+        pthread_join(threads[thread_counter % 10], NULL);
+
+        // Modify the list to remove finished threads
+        join_free_finished_thread(&list);
+      }
+      pthread_t thread;
+      if (pthread_create(&threads[thread_counter % 10], NULL, (void *(*)(void *))blur_helper, item) != 0)
+      {
+        join_free_finished_thread(&list);
+      }
+      add_thread(&list, threads[thread_counter % 10]);
+    }
+  }
+  for (int i = 0; i < thread_counter % 10; i++)
+  {
+    pthread_join(threads[i], NULL);
+
+    // Modify the list to remove finished threads
+    join_free_finished_thread(&list);
+  }
   clear_picture(pic);
   overwrite_picture(pic, &tmp);
 }
