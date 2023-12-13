@@ -265,7 +265,7 @@ void parallel_blur_picture(struct picture *pic)
       item->tmp = &tmp;
       item->row_index = i;
       item->col_index = j;
-      pthread_create(&pool.threads[thread_counter], NULL, (void *(*)(void *))blur_pixel, item);
+      pthread_create(&pool.threads[thread_counter], NULL, (void *(*)(void *))blur_helper, item);
       thread_counter++;
     }
   }

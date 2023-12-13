@@ -11,9 +11,11 @@
 
 void execute(void (*blur)(struct picture *), struct picture *pic, const char *blur_file);
 long long get_current_time(void);
-void blur_row(struct work_item *work_arg);
 void sequentially_blur_picture(struct picture *pic);
+void blur_row(struct work_item *work_arg);
 void row_blur_picture(struct picture *pic);
+void blur_col(struct work_item *work_arg);
+void column_blur_picture(struct picture *pic);
 
 struct thread_list
 {
@@ -39,9 +41,28 @@ int main(int argc, char **argv)
     exit(IO_ERROR);
   }
 
+  printf("Sequential Blurring Executed\n");
+  execute(sequentially_blur_picture, &pic, blur_file);
+  clear_picture(&pic);
+
+  if (!init_picture_from_file(&pic, file))
+  {
+    exit(IO_ERROR);
+  }
+
   printf("Row by row Blurring Executed\n");
   execute(row_blur_picture, &pic, blur_file);
   clear_picture(&pic);
+
+  if (!init_picture_from_file(&pic, file))
+  {
+    exit(IO_ERROR);
+  }
+
+  printf("Column by column Blurring Executed\n");
+  execute(column_blur_picture, &pic, blur_file);
+  clear_picture(&pic);
+
   return 0;
 }
 
@@ -164,6 +185,47 @@ void row_blur_picture(struct picture *pic)
     item->col_index = i;
     pthread_t thread;
     if (pthread_create(&thread, NULL, (void *(*)(void *))blur_row, item) != 0)
+    {
+      join_free_finished_thread(&list);
+    }
+    add_thread(&list, thread);
+  }
+  join_free_thread(&list);
+  clear_picture(pic);
+  overwrite_picture(pic, &tmp);
+}
+
+void blur_col(struct work_item *work_arg)
+{
+  for (int i = 1; i < work_arg->pic->width - 1; i++)
+  {
+    work_arg->col_index = i;
+    blur_helper(work_arg);
+  }
+  free(work_arg);
+}
+
+void column_blur_picture(struct picture *pic)
+{
+  struct picture tmp;
+  tmp.img = copy_image(pic->img);
+  tmp.width = pic->width;
+  tmp.height = pic->height;
+  struct thread_list list;
+  init_thread_list(&list);
+
+  for (int i = 1; i < pic->width - 1; i++)
+  {
+    struct work_item *item = (struct work_item *)malloc(sizeof(struct work_item));
+    if (item == NULL)
+    {
+      break;
+    }
+    item->pic = pic;
+    item->tmp = &tmp;
+    item->row_index = i;
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, (void *(*)(void *))blur_col, item) != 0)
     {
       join_free_finished_thread(&list);
     }
