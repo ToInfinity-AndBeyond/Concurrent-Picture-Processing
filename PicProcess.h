@@ -35,5 +35,6 @@ void blur_picture(struct picture *pic);
 void parallel_blur_picture(struct picture *pic);
 
 void blur_helper(void *work_arg);
+void init_thread_pool(struct ThreadPool *pool, int thread_count);
 
 #endif
