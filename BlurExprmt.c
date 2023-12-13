@@ -16,7 +16,9 @@ void blur_row(struct work_item *work_arg);
 void row_blur_picture(struct picture *pic);
 void blur_col(struct work_item *work_arg);
 void column_blur_picture(struct picture *pic);
-
+void blur_sector(struct work_item *work_arg);
+void sector_blur_picture(struct picture *pic);
+void pixel_blur_picture(struct picture *pic);
 struct thread_list
 {
   struct node *head;
@@ -32,7 +34,7 @@ struct node
 
 int main(int argc, char **argv)
 {
-  const char *file = "images/ducks1.jpg";
+  const char *file = "images/keepcalm.png";
   const char *blur_file = "images/duck_seq.jpg";
   struct picture pic;
 
@@ -40,9 +42,10 @@ int main(int argc, char **argv)
   {
     exit(IO_ERROR);
   }
+  // printf("%d, %d", pic.width, pic.height);
 
   printf("Sequential Blurring Executed\n");
-  execute(sequentially_blur_picture, &pic, blur_file);
+  execute(sequentially_blur_picture, &pic, "images/duck_seq.jpg");
   clear_picture(&pic);
 
   if (!init_picture_from_file(&pic, file))
@@ -51,7 +54,7 @@ int main(int argc, char **argv)
   }
 
   printf("Row by row Blurring Executed\n");
-  execute(row_blur_picture, &pic, blur_file);
+  execute(row_blur_picture, &pic, "images/duck_row.jpg");
   clear_picture(&pic);
 
   if (!init_picture_from_file(&pic, file))
@@ -60,7 +63,25 @@ int main(int argc, char **argv)
   }
 
   printf("Column by column Blurring Executed\n");
-  execute(column_blur_picture, &pic, blur_file);
+  execute(column_blur_picture, &pic, "images/duck_col.jpg");
+  clear_picture(&pic);
+
+  if (!init_picture_from_file(&pic, file))
+  {
+    exit(IO_ERROR);
+  }
+
+  printf("Sector by sector Blurring Executed\n");
+  execute(sector_blur_picture, &pic, "images/duck_sector.jpg");
+  clear_picture(&pic);
+
+  if (!init_picture_from_file(&pic, file))
+  {
+    exit(IO_ERROR);
+  }
+
+  printf("Pixel by pixel Blurring Executed\n");
+  execute(parallel_blur_picture, &pic, "images/duck_pixel.jpg");
   clear_picture(&pic);
 
   return 0;
@@ -197,7 +218,7 @@ void row_blur_picture(struct picture *pic)
 
 void blur_col(struct work_item *work_arg)
 {
-  for (int i = 1; i < work_arg->pic->width - 1; i++)
+  for (int i = 0; i < work_arg->pic->height; i++)
   {
     work_arg->col_index = i;
     blur_helper(work_arg);
@@ -208,13 +229,11 @@ void blur_col(struct work_item *work_arg)
 void column_blur_picture(struct picture *pic)
 {
   struct picture tmp;
-  tmp.img = copy_image(pic->img);
-  tmp.width = pic->width;
-  tmp.height = pic->height;
+  init_picture_from_size(&tmp, pic->width, pic->height);
   struct thread_list list;
   init_thread_list(&list);
 
-  for (int i = 1; i < pic->width - 1; i++)
+  for (int i = 0; i < pic->width; i++)
   {
     struct work_item *item = (struct work_item *)malloc(sizeof(struct work_item));
     if (item == NULL)
@@ -226,6 +245,86 @@ void column_blur_picture(struct picture *pic)
     item->row_index = i;
     pthread_t thread;
     if (pthread_create(&thread, NULL, (void *(*)(void *))blur_col, item) != 0)
+    {
+      join_free_finished_thread(&list);
+    }
+    add_thread(&list, thread);
+  }
+  join_free_thread(&list);
+  clear_picture(pic);
+  overwrite_picture(pic, &tmp);
+}
+
+void blur_sector(struct work_item *work_arg)
+{
+  int start_row = work_arg->start_row;
+  int start_col = work_arg->start_col;
+  int sector_width = work_arg->sector_width;
+  int sector_height = work_arg->sector_height;
+
+  for (int i = start_row; i < start_row + sector_width; i++)
+  {
+    for (int j = start_col; j < start_col + sector_height; j++)
+    {
+      work_arg->row_index = i;
+      work_arg->col_index = j;
+      blur_helper(work_arg);
+    }
+  }
+  free(work_arg);
+}
+
+void sector_blur_picture(struct picture *pic)
+{
+  struct picture tmp;
+  init_picture_from_size(&tmp, pic->width, pic->height);
+  struct thread_list list;
+  init_thread_list(&list);
+
+  int sector_width;
+  int sector_height;
+  // printf("%d, %d\n", tmp.width, tmp.height);
+  if (tmp.width > tmp.height)
+  {
+    sector_width = tmp.width / 4;
+    sector_height = tmp.height / 2;
+  }
+  else
+  {
+    sector_height = tmp.height / 4;
+    sector_width = tmp.width / 2;
+  }
+  // printf("%d, %d\n", sector_height, sector_width);
+  for (int sector = 0; sector < 8; sector++)
+  {
+    int start_row;
+    int start_col;
+    if (tmp.width > tmp.height)
+    {
+      start_row = (sector / 2) * sector_width;
+      start_col = (sector % 2) * sector_height;
+    }
+    else
+    {
+      start_row = (sector % 2) * sector_width;
+      start_col = (sector / 2) * sector_height;
+    }
+    // printf("%d, %d\n", start_row, start_col);
+
+    struct work_item *item = (struct work_item *)malloc(sizeof(struct work_item));
+    if (item == NULL)
+    {
+      break;
+    }
+    item->pic = pic;
+    item->tmp = &tmp;
+
+    item->sector_height = sector_height;
+    item->sector_width = sector_width;
+    item->start_col = start_col;
+    item->start_row = start_row;
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, (void *(*)(void *))blur_sector, item) != 0)
     {
       join_free_finished_thread(&list);
     }
