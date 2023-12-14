@@ -8,6 +8,7 @@
 
 #define BLUR_REGION_SIZE 9
 #define MAX_THREAD 100
+#define NUM_OF_BLUR_METHODS 6
 
 void execute(void (*blur)(struct picture *), struct picture *pic, const char *blur_file);
 long long get_current_time(void);
@@ -17,7 +18,8 @@ void row_blur_picture(struct picture *pic);
 void blur_col(struct work_item *work_arg);
 void column_blur_picture(struct picture *pic);
 void blur_sector(struct work_item *work_arg);
-void sector_blur_picture(struct picture *pic);
+void sector_blur_picture_by_8(struct picture *pic);
+void sector_blur_picture_by_4(struct picture *pic);
 void pixel_blur_picture(struct picture *pic);
 void blur_pixel(struct work_item *work_arg);
 
@@ -40,12 +42,14 @@ int main(int argc, char **argv)
   const char *blur_file = "images/duck_seq.jpg";
   struct picture pic;
 
+  // for (int i = 0; i < NUM_OF_BLUR_METHODS; i++)
+  // {
+  // }
+
   if (!init_picture_from_file(&pic, file))
   {
     exit(IO_ERROR);
   }
-  // printf("%d, %d", pic.width, pic.height);
-
   printf("Sequential Blurring Executed\n");
   execute(sequentially_blur_picture, &pic, "images/duck_seq.jpg");
   clear_picture(&pic);
@@ -73,8 +77,17 @@ int main(int argc, char **argv)
     exit(IO_ERROR);
   }
 
-  printf("Sector by sector Blurring Executed\n");
-  execute(sector_blur_picture, &pic, "images/duck_sector.jpg");
+  printf("Sector by sector 4 Blurring Executed\n");
+  execute(sector_blur_picture_by_4, &pic, "images/duck_sector_4.jpg");
+  clear_picture(&pic);
+
+  if (!init_picture_from_file(&pic, file))
+  {
+    exit(IO_ERROR);
+  }
+
+  printf("Sector by sector 8 Blurring Executed\n");
+  execute(sector_blur_picture_by_8, &pic, "images/duck_sector_8.jpg");
   clear_picture(&pic);
 
   if (!init_picture_from_file(&pic, file))
@@ -207,10 +220,7 @@ void row_blur_picture(struct picture *pic)
     item->tmp = &tmp;
     item->col_index = i;
     pthread_t thread;
-    if (pthread_create(&thread, NULL, (void *(*)(void *))blur_row, item) != 0)
-    {
-      join_free_finished_thread(&list);
-    }
+    pthread_create(&thread, NULL, (void *(*)(void *))blur_row, item);
     add_thread(&list, thread);
   }
   join_free_thread(&list);
@@ -276,7 +286,49 @@ void blur_sector(struct work_item *work_arg)
   free(work_arg);
 }
 
-void sector_blur_picture(struct picture *pic)
+void sector_blur_picture_by_4(struct picture *pic)
+{
+  struct picture tmp;
+  init_picture_from_size(&tmp, pic->width, pic->height);
+  struct thread_list list;
+  init_thread_list(&list);
+
+  int sector_width;
+  int sector_height;
+
+  sector_width = tmp.width / 2;
+  sector_height = tmp.height / 2;
+
+  for (int sector = 0; sector < 4; sector++)
+  {
+    int start_row = (sector / 2) * sector_width;
+    int start_col = (sector % 2) * sector_height;
+
+    struct work_item *item = (struct work_item *)malloc(sizeof(struct work_item));
+    if (item == NULL)
+    {
+      break;
+    }
+    item->pic = pic;
+    item->tmp = &tmp;
+
+    item->sector_height = sector_height;
+    item->sector_width = sector_width;
+    item->start_col = start_col;
+    item->start_row = start_row;
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, (void *(*)(void *))blur_sector, item) != 0)
+    {
+      join_free_finished_thread(&list);
+    }
+    add_thread(&list, thread);
+  }
+  join_free_thread(&list);
+  clear_picture(pic);
+  overwrite_picture(pic, &tmp);
+}
+
+void sector_blur_picture_by_8(struct picture *pic)
 {
   struct picture tmp;
   init_picture_from_size(&tmp, pic->width, pic->height);
@@ -346,9 +398,6 @@ void pixel_blur_picture(struct picture *pic)
   struct thread_list list;
   init_thread_list(&list);
 
-  pthread_t threads[10];
-  int thread_counter = 0;
-
   // iterate over each pixel in the picture
   for (int i = 0; i < tmp.width; i++)
   {
@@ -363,28 +412,16 @@ void pixel_blur_picture(struct picture *pic)
       item->tmp = &tmp;
       item->row_index = i;
       item->col_index = j;
-      if (thread_counter >= 10)
-      {
-        pthread_join(threads[thread_counter % 10], NULL);
 
-        // Modify the list to remove finished threads
-        join_free_finished_thread(&list);
-      }
       pthread_t thread;
-      if (pthread_create(&threads[thread_counter % 10], NULL, (void *(*)(void *))blur_helper, item) != 0)
+      while (pthread_create(&thread, NULL, (void *(*)(void *))blur_helper, item) != 0)
       {
         join_free_finished_thread(&list);
       }
-      add_thread(&list, threads[thread_counter % 10]);
+      add_thread(&list, thread);
     }
   }
-  for (int i = 0; i < thread_counter % 10; i++)
-  {
-    pthread_join(threads[i], NULL);
-
-    // Modify the list to remove finished threads
-    join_free_finished_thread(&list);
-  }
+  join_free_thread(&list);
   clear_picture(pic);
   overwrite_picture(pic, &tmp);
 }

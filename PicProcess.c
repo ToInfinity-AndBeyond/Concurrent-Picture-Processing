@@ -231,7 +231,6 @@ void blur_helper(void *work_arg)
     rgb.green = sum_green / BLUR_REGION_SIZE;
     rgb.blue = sum_blue / BLUR_REGION_SIZE;
   }
-
   // set pixel to computed region RBG value (unmodified if boundary)
   set_pixel(tmp, i, j, &rgb);
 }
