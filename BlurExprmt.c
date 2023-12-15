@@ -122,7 +122,7 @@ int main(int argc, char **argv)
   printf("%-5s%-28s%-32s%-10s\n", " ", "Blurring Method", "Average Iteration Time", "Rank");
   for (int i = 0; i < sizeof(methods) / sizeof(methods[0]); ++i)
   {
-    printf("%-35s%4lld milliseconds %15d\n", method_times[i].method,
+    printf("%-35s%5lld milliseconds %15d\n", method_times[i].method,
            method_times[i].average_time, i + 1);
   }
 
@@ -423,11 +423,6 @@ void sector_blur_picture_by_8(struct picture *pic)
   overwrite_picture(pic, &tmp);
 }
 
-void blur_pixel(struct work_item *work_arg)
-{
-  blur_helper(work_arg);
-  free(work_arg);
-}
 void pixel_blur_picture(struct picture *pic)
 {
   struct picture tmp;

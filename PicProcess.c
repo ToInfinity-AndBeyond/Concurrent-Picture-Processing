@@ -2,7 +2,7 @@
 
 #define NO_RGB_COMPONENTS 3
 #define BLUR_REGION_SIZE 9
-#define MAX_THREAD 8
+#define MAX_THREAD 100
 
 void invert_picture(struct picture *pic)
 {
@@ -235,14 +235,22 @@ void blur_helper(void *work_arg)
   set_pixel(tmp, i, j, &rgb);
 }
 
+void blur_pixel(struct work_item *work_arg)
+{
+  blur_helper(work_arg);
+  free(work_arg);
+}
+
 void parallel_blur_picture(struct picture *pic)
 {
   // make new temporary picture to work in
   struct picture tmp;
   init_picture_from_size(&tmp, pic->width, pic->height);
 
-  struct ThreadPool pool;
-  init_thread_pool(&pool, MAX_THREAD);
+  pthread_t threads[MAX_THREAD];
+
+  // struct ThreadPool pool;
+  // init_thread_pool(&pool, MAX_THREAD);
   int thread_counter = 0;
 
   // iterate over each pixel in the picture
@@ -250,11 +258,6 @@ void parallel_blur_picture(struct picture *pic)
   {
     for (int j = 0; j < tmp.height; j++)
     {
-      if (thread_counter >= pool.thread_count)
-      {
-        pthread_join(pool.threads[thread_counter % pool.thread_count], NULL);
-        thread_counter--;
-      }
       struct work_item *item = (struct work_item *)malloc(sizeof(struct work_item));
       if (item == NULL)
       {
@@ -264,12 +267,25 @@ void parallel_blur_picture(struct picture *pic)
       item->tmp = &tmp;
       item->row_index = i;
       item->col_index = j;
-      pthread_create(&pool.threads[thread_counter], NULL, (void *(*)(void *))blur_helper, item);
+      pthread_create(&threads[thread_counter], NULL, blur_pixel, item);
       thread_counter++;
+
+      if (thread_counter >= MAX_THREAD)
+      {
+        // Wait for threads to finish before starting new ones
+        for (int k = 0; k < MAX_THREAD; k++)
+        {
+          pthread_join(threads[k], NULL);
+        }
+        thread_counter = 0;
+      }
     }
   }
+  for (int k = 0; k < thread_counter; k++)
+  {
+    pthread_join(threads[k], NULL);
+  }
 
-  free(pool.threads);
   // clean-up the old picture and replace with new picture
   clear_picture(pic);
   overwrite_picture(pic, &tmp);
