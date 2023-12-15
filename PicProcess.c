@@ -2,7 +2,7 @@
 
 #define NO_RGB_COMPONENTS 3
 #define BLUR_REGION_SIZE 9
-#define MAX_THREAD 100
+#define MAX_THREAD 8
 
 void invert_picture(struct picture *pic)
 {
@@ -186,12 +186,6 @@ void blur_picture(struct picture *pic)
   overwrite_picture(pic, &tmp);
 }
 
-void init_thread_pool(struct ThreadPool *pool, int thread_count)
-{
-  pool->threads = (pthread_t *)malloc(thread_count * sizeof(pthread_t));
-  pool->thread_count = thread_count;
-}
-
 void blur_helper(void *work_arg)
 {
   struct work_item *work = (struct work_item *)work_arg;
@@ -235,58 +229,103 @@ void blur_helper(void *work_arg)
   set_pixel(tmp, i, j, &rgb);
 }
 
+/*
+   Creates threads for parallel execution of a specified thread function.
+   Parameters:
+     - threads: Array of pthread_t representing the threads.
+     - thread_counter: Pointer to an integer storing the current thread count.
+     - thread_function: Pointer to the function to be executed in a thread.
+     - item: Pointer to the item to be processed by the thread function.
+*/
+
+void create_join_thread(pthread_t *threads, int *thread_counter, void *(*thread_function)(void *), void *item)
+{
+  /* Create a new thread for the given thread function and item. */
+  pthread_create(&threads[*thread_counter], NULL, thread_function, item);
+  /* Increment the thread counter to manage thread creation. */
+  (*thread_counter)++;
+
+  /* Check if the maximum thread limit is reached. */
+  if (*thread_counter >= MAX_THREAD)
+  {
+    /* Wait for threads to finish before starting new ones. */
+    for (int k = 0; k < MAX_THREAD; k++)
+    {
+      pthread_join(threads[k], NULL);
+    }
+    /* Reset the thread counter to manage new threads. */
+    *thread_counter = 0;
+  }
+}
+
+/*
+   Waits for all active threads in the given array to complete.
+   Parameters:
+     - threads: Array containing thread IDs for parallel execution.
+     - thread_count: The number of active threads in the array.
+*/
+void wait_for_threads(pthread_t *threads, int thread_count)
+{
+  for (int k = 0; k < thread_count; k++)
+  {
+    pthread_join(threads[k], NULL);
+  }
+}
+
+/*
+   Blurs a single pixel of the picture by invoking the blur_helper function.
+   Parameters:
+     - work_arg: Pointer to the work item containing information about the pixel to be blurred.
+*/
 void blur_pixel(struct work_item *work_arg)
 {
   blur_helper(work_arg);
+  /* Free the memory allocated for the work item after processing the pixel. */
   free(work_arg);
 }
 
+/*
+   Apply a parallel blur effect to every pixel of the input picture.
+   Parameters:
+     - pic: Pointer to the original picture structure to be blurred.
+*/
 void parallel_blur_picture(struct picture *pic)
 {
-  // make new temporary picture to work in
+  /* Create a temporary picture struct to hold the blurred image, and initialise it using pic. */
   struct picture tmp;
   init_picture_from_size(&tmp, pic->width, pic->height);
 
+  /* Array to store thread IDs for parallel execution. */
   pthread_t threads[MAX_THREAD];
 
-  // struct ThreadPool pool;
-  // init_thread_pool(&pool, MAX_THREAD);
+  /* Counter to keep track of the number of active threads. */
   int thread_counter = 0;
 
-  // iterate over each pixel in the picture
+  /* Iterate through each pixel of the picture for blurring. */
   for (int i = 0; i < tmp.width; i++)
   {
     for (int j = 0; j < tmp.height; j++)
     {
+      /* Allocate memory for a work item to process the current pixel. */
       struct work_item *item = (struct work_item *)malloc(sizeof(struct work_item));
       if (item == NULL)
       {
         break;
       }
+      /* Initialize work item with necessary pixel coordinates and picture information. */
       item->pic = pic;
       item->tmp = &tmp;
       item->row_index = i;
       item->col_index = j;
-      pthread_create(&threads[thread_counter], NULL, blur_pixel, item);
-      thread_counter++;
 
-      if (thread_counter >= MAX_THREAD)
-      {
-        // Wait for threads to finish before starting new ones
-        for (int k = 0; k < MAX_THREAD; k++)
-        {
-          pthread_join(threads[k], NULL);
-        }
-        thread_counter = 0;
-      }
+      /* Create and join a thread to blur the current pixel. */
+      create_join_thread(threads, &thread_counter, (void *(*)(void *))blur_helper, item);
     }
   }
-  for (int k = 0; k < thread_counter; k++)
-  {
-    pthread_join(threads[k], NULL);
-  }
+  /* Wait for all threads to complete before further processing. */
+  wait_for_threads(threads, thread_counter);
 
-  // clean-up the old picture and replace with new picture
+  /* Clear the original picture and overwrite it with the blurred image. */
   clear_picture(pic);
   overwrite_picture(pic, &tmp);
 }
