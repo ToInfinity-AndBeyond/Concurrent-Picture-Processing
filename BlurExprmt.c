@@ -41,12 +41,12 @@ struct MethodTime
 
 /* Array of file names produced by each blur method. */
 const char *blurred_files[] = {
-    "images/duck_seq.jpg",
-    "images/duck_row.jpg",
-    "images/duck_col.jpg",
-    "images/duck_sector_4.jpg",
-    "images/duck_sector_8.jpg",
-    "images/duck_pixel.jpg"};
+    "_seq.jpg",
+    "_row.jpg",
+    "_col.jpg",
+    "_sector_4.jpg",
+    "_sector_8.jpg",
+    "_pixel.jpg"};
 
 int compare_method_time(const void *a, const void *b);
 int execute(void (*blur)(struct picture *), struct picture *pic);
@@ -124,9 +124,21 @@ int main(int argc, char **argv)
                    : pixel_blur_picture,
           &pic);
     }
-    /* Save the resulting picture to a file. */
-    save_picture_to_file(&pic, blurred_files[i]);
-    /* Clear the picture after blurring. */
+    /* Generate the file path dynamically based on the given file name. */
+    char dynamic_path[500];           // Adjust the size as needed to accommodate the path
+    char file_without_extension[500]; // Adjust the size based on your maximum file path length
+
+    char *extension_position = strstr(file, ".jpg");
+
+    if (extension_position != NULL)
+    {
+      strncpy(file_without_extension, file, extension_position - file);
+      file_without_extension[extension_position - file] = '\0'; // Null-terminate the string
+    }
+    sprintf(dynamic_path, "%s%s", file_without_extension, blurred_files[i]);
+
+    /* Save the resulting picture to a file using the dynamically generated path. */
+    save_picture_to_file(&pic, dynamic_path); /* Clear the picture after blurring. */
     clear_picture(&pic);
     /* Calculate and store the average execution time for the current blurring method. */
     average_times[i] = execution_time / iterations;
@@ -148,10 +160,10 @@ int main(int argc, char **argv)
   /* Display results: Iteration count, sorted method names, their average times, and ranks. */
   printf("%23Iterated for %d time%s\n", iterations, iterations != 1 ? "s" : "");
   printf("---------------------------------------------------------------------\n");
-  printf("%-5s%-28s%-32s%-10s\n", " ", "Blurring Method", "Average Iteration Time", "Rank");
+  printf("%-5s%-28s%-32s%-12s\n", " ", "Blurring Method", "Average Blurring Time", "Rank");
   for (int i = 0; i < sizeof(methods) / sizeof(methods[0]); ++i)
   {
-    printf("%-35s%5lld milliseconds %14d\n", method_times[i].method,
+    printf("%-33s%6lld milliseconds %14d\n", method_times[i].method,
            method_times[i].average_time, i + 1);
   }
   return 0;
