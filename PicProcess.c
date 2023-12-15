@@ -2,7 +2,7 @@
 
 #define NO_RGB_COMPONENTS 3
 #define BLUR_REGION_SIZE 9
-#define MAX_THREAD 100
+#define MAX_THREAD 8
 
 void invert_picture(struct picture *pic)
 {
